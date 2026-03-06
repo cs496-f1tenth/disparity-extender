@@ -6,7 +6,7 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
-
+from rtec_f1tenth_comm.msg import Waypoint, Trajectory
 
 class DisparityExtender(Node):
 
@@ -39,6 +39,7 @@ class DisparityExtender(Node):
             LaserScan, lidarscan_topic, self.process_lidar, 1)
         self.drive_pub = self.create_publisher(
             AckermannDriveStamped, drive_topic, 1)
+        self.traj_pub = self.create_publisher(Trajectory, '/trajectory', 1)
 
     def odom_cb(self, data):
         self.speed = data.twist.twist.linear.x
@@ -105,6 +106,20 @@ class DisparityExtender(Node):
             lidar_angle, np.radians(-90), np.radians(90)
         ) / self.STEERING_SENSITIVITY
         return steering_angle
+    
+    def publish_trajectory(self, steering_angle, speed):
+        waypoint = Waypoint()
+        waypoint.s = 0.0
+        waypoint.x = 0.0
+        waypoint.y = 0.0
+        waypoint.psi = steering_angle
+        waypoint.kappa = 0.0
+        waypoint.v = speed
+        waypoint.a = 0.0
+
+        traj_msg = Trajectory()
+        traj_msg.waypoints = [waypoint]
+        self.traj_pub.publish(traj_msg)
 
     def process_lidar(self, data):
         ranges = data.ranges
@@ -128,6 +143,9 @@ class DisparityExtender(Node):
         drive_msg.drive.steering_angle = steering_angle
         drive_msg.drive.speed = speed
         self.drive_pub.publish(drive_msg)
+
+        self.drive_pub.publish(drive_msg)
+        self.publish_trajectory(steering_angle, speed)  # <-- add this
 
 
 def main(args=None):
