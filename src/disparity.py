@@ -48,7 +48,7 @@ class DisparityExtender(Node):
     # --- Steering feel ---
     STEER_DEADBAND_DEG = 2.0
     STEER_GAIN         = 0.60
-    MAX_STEER_DEG      = 1.0
+    MAX_STEER_DEG      = 20.0
     STEER_SMOOTH_ALPHA = 0.20
 
     # --- Speed reduction in turns ---
@@ -280,9 +280,15 @@ class DisparityExtender(Node):
 
         max_steer = math.radians(self.MAX_STEER_DEG)
         steering_angle = float(np.clip(steering_angle, -max_steer, max_steer))
+        
+        prev = self._steer_filt
+        new = steering_angle
 
-        a = float(self.STEER_SMOOTH_ALPHA)
-        self._steer_filt = (1.0 - a) * self._steer_filt + a * steering_angle
+        a_turn = 0.15 # slower ramp into turns
+        a_return = 0.35 # faster to return to straight
+
+        a = a_return if abs(new) < abs(prev) else a_turn
+        self._steer_filt = (1.0 - a) * prev + a * new
         return self._steer_filt
 
     def build_trajectory(self, x0: float, y0: float, yaw0: float,
@@ -297,18 +303,22 @@ class DisparityExtender(Node):
         x, y, psi = x0, y0, yaw0
         s = 0.0
 
-        for _ in range(steps):
+        for t in range(steps):
             wp = Waypoint()
             wp.s = s
             wp.x = x
             wp.y = y
             wp.psi = psi
-            wp.kappa = kappa
+
+            frac = t / max(1, steps - 1)
+            kappa_t = kappa * math.exp(-3.0 * frac)
+            wp.kappa = kappa_t
+
             wp.v = speed
             wp.a = 0.0
             waypoints.append(wp)
 
-            dpsi = kappa * ds
+            dpsi = kappa_t * ds
             psi_mid = psi + dpsi / 2.0
             x += ds * math.cos(psi_mid)
             y += ds * math.sin(psi_mid)
