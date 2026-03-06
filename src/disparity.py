@@ -123,7 +123,7 @@ class DisparityExtender(Node):
 
     def process_lidar(self, data):
         ranges = data.ranges
-        self.radians_per_point = (2 * np.pi) / len(ranges)
+        self.radians_per_point = data.angle_increment
 
         proc_ranges = self.preprocess_lidar(ranges)
         differences = self.get_differences(proc_ranges)
@@ -131,10 +131,16 @@ class DisparityExtender(Node):
         proc_ranges = self.extend_disparities(
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_PERCENTAGE)
 
-        steering_angle = self.get_steering_angle(
-            proc_ranges.argmax(), len(proc_ranges))
+        center = len(proc_ranges) // 2
+        indices = np.arange(len(proc_ranges))
+        
+        bias = 0.0005 #needs tuning
+        scores = proc_ranges - bias*(indices - center)**2 #quadratic penalty for turning hard
+        best_index = int(np.argmax(scores))
+        steering_angle = self.get_steering_angle(best_index, len(proc_ranges))
 
-        x = max(proc_ranges[227:237])
+        width = 5
+        x = max(proc_ranges[center - width:center + width])
         speed = self.COEFFICIENT * math.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
