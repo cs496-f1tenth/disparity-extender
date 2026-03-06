@@ -12,9 +12,9 @@ class DisparityExtender(Node):
 
     CAR_WIDTH = 0.45
     DIFFERENCE_THRESHOLD = 2.
-    STRAIGHTS_SPEED = 4.0
-    CORNERS_SPEED = 3.0
-    DRAG_SPEED = 4.0
+    STRAIGHTS_SPEED = 1.0
+    CORNERS_SPEED = 1.0
+    DRAG_SPEED = 1.0
     SAFETY_PERCENTAGE = 900.
 
     def __init__(self):
@@ -26,7 +26,7 @@ class DisparityExtender(Node):
         self.X_POWER = 1.8
         self.QUADRANT_FACTOR = 3.5
 
-        self.speed = 4.0  # Initial speed
+        self.speed = 1.0  # Initial speed
         self.radians_per_point = 0.0
 
         lidarscan_topic = '/scan'
@@ -119,7 +119,9 @@ class DisparityExtender(Node):
         steering_angle = self.get_steering_angle(
             proc_ranges.argmax(), len(proc_ranges))
 
-        x = max(proc_ranges[227:237])
+        center = len(proc_ranges) // 2
+        window = 5; #width to read around center
+        x = max(proc_ranges[center - window : center + window])
         speed = self.COEFFICIENT * math.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
