@@ -10,7 +10,7 @@ from nav_msgs.msg import Odometry
 
 class DisparityExtender(Node):
 
-    CAR_WIDTH = 0.45
+    CAR_WIDTH = 1.0
     DIFFERENCE_THRESHOLD = 2.
     STRAIGHTS_SPEED = 1.0
     CORNERS_SPEED = 1.0
@@ -20,11 +20,11 @@ class DisparityExtender(Node):
     def __init__(self):
         super().__init__('disparity_extender_node')
 
-        self.STEERING_SENSITIVITY = 3.
-        self.COEFFICIENT = 2.5
+        self.STEERING_SENSITIVITY = 30.0
+        self.COEFFICIENT = 1.0
         self.EXP_COEFFICIENT = 0.02
         self.X_POWER = 1.8
-        self.QUADRANT_FACTOR = 3.5
+        self.QUADRANT_FACTOR = 5.0
 
         self.speed = 1.0  # Initial speed
         self.radians_per_point = 0.0
@@ -34,7 +34,7 @@ class DisparityExtender(Node):
         drive_topic = '/vesc/low_level/ackermann_cmd_mux/input/teleop'
 
         self.odom_sub = self.create_subscription(
-            Odometry, odom_topic, self.odom_cb, 1)
+            Odometry, odom_topic, self.odom_cb, 2)
         self.lidar_sub = self.create_subscription(
             LaserScan, lidarscan_topic, self.process_lidar, 1)
         self.drive_pub = self.create_publisher(
@@ -44,7 +44,7 @@ class DisparityExtender(Node):
         self.speed = data.twist.twist.linear.x
 
     def preprocess_lidar(self, ranges):
-        ranges = np.clip(ranges, 0, 16)
+        ranges = np.clip(ranges, 0, 8)
         eighth = int(len(ranges) / self.QUADRANT_FACTOR)
         return np.array(ranges[eighth:-eighth])
 
@@ -102,8 +102,7 @@ class DisparityExtender(Node):
     def get_steering_angle(self, range_index, range_len):
         lidar_angle = (range_index - (range_len / 2)) * self.radians_per_point
         steering_angle = np.clip(
-            lidar_angle, np.radians(-90), np.radians(90)
-        ) / self.STEERING_SENSITIVITY
+            lidar_angle, np.radians(-90), np.radians(90)) / self.STEERING_SENSITIVITY
         return steering_angle
 
     def process_lidar(self, data):
@@ -115,9 +114,14 @@ class DisparityExtender(Node):
         disparities = self.get_disparities(differences, self.DIFFERENCE_THRESHOLD)
         proc_ranges = self.extend_disparities(
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_PERCENTAGE)
+        
 
-        steering_angle = self.get_steering_angle(
-            proc_ranges.argmax(), len(proc_ranges))
+        #ADDED THINGS TO STEERING ANGLE CALCULATIOn
+        center = len(proc_ranges) // 2
+        weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * 0.2)) ** 2)
+        weighted_ranges = proc_ranges * weights
+        steering_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
+        #---------------------------
 
         center = len(proc_ranges) // 2
         window = 5; #width to read around center
