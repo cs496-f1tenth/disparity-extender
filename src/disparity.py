@@ -20,7 +20,7 @@ class DisparityExtender(Node):
     def __init__(self):
         super().__init__('disparity_extender_node')
 
-        self.STEERING_SENSITIVITY = 30.0
+        self.STEERING_SENSITIVITY = 5.0
         self.COEFFICIENT = 1.0
         self.EXP_COEFFICIENT = 0.02
         self.X_POWER = 1.8
@@ -118,7 +118,7 @@ class DisparityExtender(Node):
 
         #ADDED THINGS TO STEERING ANGLE CALCULATIOn
         center = len(proc_ranges) // 2
-        weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * 0.2)) ** 2)
+        weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * 0.6)) ** 2)
         weighted_ranges = proc_ranges * weights
         steering_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
         #---------------------------
