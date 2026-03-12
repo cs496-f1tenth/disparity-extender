@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import numpy as np
-import math
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
@@ -25,6 +24,7 @@ class DisparityExtender(Node):
         self.EXP_COEFFICIENT = 0.02
         self.X_POWER = 1.8
         self.QUADRANT_FACTOR = 5.0
+        self.GAUSSIAN_SIG_PCT = 0.6
 
         self.speed = 1.0  # Initial speed
         self.radians_per_point = 0.0
@@ -49,17 +49,10 @@ class DisparityExtender(Node):
         return np.array(ranges[eighth:-eighth])
 
     def get_differences(self, ranges):
-        differences = [0.]
-        for i in range(1, len(ranges)):
-            differences.append(abs(ranges[i] - ranges[i - 1]))
-        return differences
+        return np.concatenate(([0.], np.abs(np.diff(ranges))))
 
     def get_disparities(self, differences, threshold):
-        disparities = []
-        for index, difference in enumerate(differences):
-            if difference > threshold:
-                disparities.append(index)
-        return disparities
+        return np.where(differences > threshold)[0]
 
     def get_num_points_to_cover(self, dist, width):
         angle = 1.5 * np.arctan(width / (2 * dist))
@@ -69,19 +62,11 @@ class DisparityExtender(Node):
     def cover_points(self, num_points, start_idx, cover_right, ranges):
         new_dist = ranges[start_idx]
         if cover_right:
-            for i in range(num_points):
-                next_idx = start_idx + 1 + i
-                if next_idx >= len(ranges):
-                    break
-                if ranges[next_idx] > new_dist:
-                    ranges[next_idx] = new_dist
+            end = min(start_idx + 1 + num_points, len(ranges))
+            ranges[start_idx + 1:end] = np.minimum(ranges[start_idx + 1:end], new_dist)
         else:
-            for i in range(num_points):
-                next_idx = start_idx - 1 - i
-                if next_idx < 0:
-                    break
-                if ranges[next_idx] > new_dist:
-                    ranges[next_idx] = new_dist
+            start = max(0, start_idx - num_points)
+            ranges[start:start_idx] = np.minimum(ranges[start:start_idx], new_dist)
         return ranges
 
     def extend_disparities(self, disparities, ranges, car_width, extra_pct):
@@ -107,7 +92,7 @@ class DisparityExtender(Node):
 
     def process_lidar(self, data):
         ranges = data.ranges
-        self.radians_per_point = (2 * np.pi) / len(ranges)
+        self.radians_per_point = data.angle_increment
 
         proc_ranges = self.preprocess_lidar(ranges)
         differences = self.get_differences(proc_ranges)
@@ -118,15 +103,15 @@ class DisparityExtender(Node):
 
         #ADDED THINGS TO STEERING ANGLE CALCULATIOn
         center = len(proc_ranges) // 2
-        weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * 0.6)) ** 2)
+        weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * self.GAUSSIAN_SIG_PCT)) ** 2)
         weighted_ranges = proc_ranges * weights
         steering_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
         #---------------------------
 
         center = len(proc_ranges) // 2
         window = 5; #width to read around center
-        x = max(proc_ranges[center - window : center + window])
-        speed = self.COEFFICIENT * math.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
+        x = np.max(proc_ranges[center - window : center + window])
+        speed = self.COEFFICIENT * np.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
         drive_msg = AckermannDriveStamped()
