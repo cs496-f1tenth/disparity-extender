@@ -129,6 +129,10 @@ class DisparityExtender(Node):
         speed = self.COEFFICIENT * math.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
+        if(x <= 2.5):
+            speed *= -1
+            steering_angle *= -1
+        
         drive_msg = AckermannDriveStamped()
         drive_msg.header.stamp = self.get_clock().now().to_msg()
         drive_msg.drive.steering_angle = steering_angle
