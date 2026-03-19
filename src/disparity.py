@@ -129,7 +129,8 @@ class DisparityExtender(Node):
         speed = self.COEFFICIENT * math.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
-        if(x <= 2.5):
+        #Makes the car backup and turn towards the goal point if there are no good paths.
+        if(x <= 2.0):
             speed *= -1
             steering_angle *= -1
         
