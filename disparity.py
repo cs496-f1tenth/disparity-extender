@@ -5,28 +5,38 @@ from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from ackermann_msgs.msg import AckermannDriveStamped
 from nav_msgs.msg import Odometry
+from datetime import datetime
 
 
 class DisparityExtender(Node):
 
-    CAR_WIDTH = 0.45
+    CAR_WIDTH = 0.27
     DIFFERENCE_THRESHOLD = 2.
     STRAIGHTS_SPEED = 1.0
     CORNERS_SPEED = 1.0
     DRAG_SPEED = 1.0
-    SAFETY_PERCENTAGE = 900.
+    SAFETY_PERCENTAGE = 3.00
+    VIEW_RANGE = 10
+
+    #PD controller variables
+    MAX_SPEED = 6.0
+    KP = 0.5
+    KD = 0.25
+    PD_MAX_OUTPUT = 10.0
 
     def __init__(self):
         super().__init__('disparity_extender_node')
 
         self.STEERING_SENSITIVITY = 3.0
-        self.COEFFICIENT = 2.5
-        self.EXP_COEFFICIENT = 0.02
-        self.X_POWER = 1.8
         self.QUADRANT_FACTOR = 3.5
-        self.GAUSSIAN_SIG_PCT = 0.6
 
-        self.speed = 4.0  # Initial speed
+        #PD controller variables
+        self.pd_output = 0.0
+        self.prev_error = 0.0
+        self.prev_time = 0.0
+        self.is_first_run = True
+
+        self.speed = 2.0  # Initial speed
         self.radians_per_point = 0.0
 
         lidarscan_topic = '/scan'
@@ -40,11 +50,34 @@ class DisparityExtender(Node):
         self.drive_pub = self.create_publisher(
             AckermannDriveStamped, drive_topic, 1)
 
+    #PD controller returns a "danger value"
+    def pd_controller_update(self, forward_clearance):
+        current_time = self.get_clock().now().nanoseconds * 1e-9
+        error = self.VIEW_RANGE - forward_clearance
+        derivative = 0.0
+
+        if(self.is_first_run):
+            self.is_first_run = False
+        else:
+            dt = current_time - self.prev_time
+            if(dt > 1e-6):
+                derivative = (error - self.prev_error)/dt
+
+        #if there is too much jittering, may need to filter noise from deriavtive
+        raw_pd = (self.KP * error) + (self.KD * derivative)
+        
+        self.prev_error = error
+        self.prev_time = current_time
+
+        self.get_logger().info(f'raw_pd: {raw_pd:.3f}, error: {error:.3f}, derivative: {derivative:.3f}')
+        return np.clip(raw_pd, 0.0, self.PD_MAX_OUTPUT)
+            
+
     def odom_cb(self, data):
         self.speed = data.twist.twist.linear.x
 
     def preprocess_lidar(self, ranges):
-        ranges = np.clip(ranges, 0, 16)
+        ranges = np.clip(ranges, 0, self.VIEW_RANGE)
         eighth = int(len(ranges) / self.QUADRANT_FACTOR)
         return np.array(ranges[eighth:-eighth])
 
@@ -70,7 +103,7 @@ class DisparityExtender(Node):
         return ranges
 
     def extend_disparities(self, disparities, ranges, car_width, extra_pct):
-        width_to_cover = 0.155 * (1 + extra_pct / 100)
+        width_to_cover = car_width * extra_pct
         for index in disparities:
             first_idx = index - 1
             points = ranges[first_idx:first_idx + 2]
@@ -103,8 +136,11 @@ class DisparityExtender(Node):
         steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges));
         center = len(proc_ranges) // 2
         window = 5; #width to read around center
-        x = np.max(proc_ranges[center - window : center + window])
-        speed = self.COEFFICIENT * np.exp(self.EXP_COEFFICIENT * (x ** self.X_POWER))
+        x = np.max(proc_ranges[center - window : center + window]) #forward clearence around center
+
+        #consider adding a speed floor so that the car doesn't stop completely
+        danger = self.pd_controller_update(x)
+        speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
         #Makes the car backup and turn towards the goal point if there are no good paths.
