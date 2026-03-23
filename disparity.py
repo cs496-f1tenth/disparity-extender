@@ -9,7 +9,7 @@ from nav_msgs.msg import Odometry
 
 class DisparityExtender(Node):
 
-    CAR_WIDTH = 1.0
+    CAR_WIDTH = 0.45
     DIFFERENCE_THRESHOLD = 2.
     STRAIGHTS_SPEED = 1.0
     CORNERS_SPEED = 1.0
@@ -19,14 +19,14 @@ class DisparityExtender(Node):
     def __init__(self):
         super().__init__('disparity_extender_node')
 
-        self.STEERING_SENSITIVITY = 5.0
-        self.COEFFICIENT = 1.0
+        self.STEERING_SENSITIVITY = 3.0
+        self.COEFFICIENT = 2.5
         self.EXP_COEFFICIENT = 0.02
         self.X_POWER = 1.8
-        self.QUADRANT_FACTOR = 5.0
+        self.QUADRANT_FACTOR = 3.5
         self.GAUSSIAN_SIG_PCT = 0.6
 
-        self.speed = 1.0  # Initial speed
+        self.speed = 4.0  # Initial speed
         self.radians_per_point = 0.0
 
         lidarscan_topic = '/scan'
@@ -44,7 +44,7 @@ class DisparityExtender(Node):
         self.speed = data.twist.twist.linear.x
 
     def preprocess_lidar(self, ranges):
-        ranges = np.clip(ranges, 0, 8)
+        ranges = np.clip(ranges, 0, 16)
         eighth = int(len(ranges) / self.QUADRANT_FACTOR)
         return np.array(ranges[eighth:-eighth])
 
@@ -100,14 +100,7 @@ class DisparityExtender(Node):
         proc_ranges = self.extend_disparities(
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_PERCENTAGE)
         
-
-        #ADDED THINGS TO STEERING ANGLE CALCULATIOn
-        center = len(proc_ranges) // 2
-        weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * self.GAUSSIAN_SIG_PCT)) ** 2)
-        weighted_ranges = proc_ranges * weights
-        steering_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
-        #---------------------------
-
+        steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges));
         center = len(proc_ranges) // 2
         window = 5; #width to read around center
         x = np.max(proc_ranges[center - window : center + window])
@@ -115,9 +108,9 @@ class DisparityExtender(Node):
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
         #Makes the car backup and turn towards the goal point if there are no good paths.
-        if(x <= 2.0):
-            speed *= -1
-            steering_angle *= -1
+        #if(x <= 2.0):
+        #    speed *= -1
+        #    steering_angle *= -1
         
         drive_msg = AckermannDriveStamped()
         drive_msg.header.stamp = self.get_clock().now().to_msg()
