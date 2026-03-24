@@ -24,6 +24,12 @@ class DisparityExtender(Node):
     KD = 0.25
     PD_MAX_OUTPUT = 10.0
 
+    #Used for derivative low pass filtering, should add up to 1.
+    # Greater old = more smoothing
+    # Greater new = more responsive but less noise suppression
+    PD_FILTER_OLD = 0.8
+    PD_FILTER_NEW = 0.2
+
     def __init__(self):
         super().__init__('disparity_extender_node')
 
@@ -35,6 +41,7 @@ class DisparityExtender(Node):
         self.prev_error = 0.0
         self.prev_time = 0.0
         self.is_first_run = True
+        self.filtered_derivative = 0.0
 
         self.speed = 2.0  # Initial speed
         self.radians_per_point = 0.0
@@ -64,12 +71,13 @@ class DisparityExtender(Node):
                 derivative = (error - self.prev_error)/dt
 
         #if there is too much jittering, may need to filter noise from deriavtive
-        raw_pd = (self.KP * error) + (self.KD * derivative)
+        self.filtered_derivative = 0.8 * self.filtered_derivative + 0.2 * derivative
+        raw_pd = (self.KP * error) + (self.KD * self.filtered_derivative)
         
         self.prev_error = error
         self.prev_time = current_time
 
-        self.get_logger().info(f'raw_pd: {raw_pd:.3f}, error: {error:.3f}, derivative: {derivative:.3f}')
+        self.get_logger().info(f'raw_pd: {raw_pd:.3f}, error: {error:.3f}, derivative: {self.filtered_derivative:.3f}')
         return np.clip(raw_pd, 0.0, self.PD_MAX_OUTPUT)
             
 
@@ -133,9 +141,9 @@ class DisparityExtender(Node):
         proc_ranges = self.extend_disparities(
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_PERCENTAGE)
         
-        steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges));
+        steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges))
         center = len(proc_ranges) // 2
-        window = 5; #width to read around center
+        window = 5 #width to read around center
         x = np.max(proc_ranges[center - window : center + window]) #forward clearence around center
 
         #consider adding a speed floor so that the car doesn't stop completely
