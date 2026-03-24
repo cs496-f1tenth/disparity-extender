@@ -4,7 +4,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from ackermann_msgs.msg import AckermannDriveStamped
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
+from geometry_msgs.msg import PoseStamped
 from datetime import datetime
 
 
@@ -56,6 +57,11 @@ class DisparityExtender(Node):
             LaserScan, lidarscan_topic, self.process_lidar, 1)
         self.drive_pub = self.create_publisher(
             AckermannDriveStamped, drive_topic, 1)
+        
+        #publishes for visualization in rviz
+        self.path_pub = self.create_publisher(Path, '/driven_path', 1)
+        self.path_msg = Path()
+        self.path_msg.header.frame_id = 'map'
 
     #PD controller returns a "danger value"
     def pd_controller_update(self, forward_clearance):
@@ -83,6 +89,14 @@ class DisparityExtender(Node):
 
     def odom_cb(self, data):
         self.speed = data.twist.twist.linear.x
+
+        #for rviz visualization
+        pose = PoseStamped()
+        pose.header = data.header
+        pose.pose = data.pose.pose
+        self.path_msg.poses.append(pose)
+        self.path_msg.header.stamp = self.get_clock().now().to_msg()
+        self.path_pub.publish(self.path_msg)
 
     def preprocess_lidar(self, ranges):
         ranges = np.clip(ranges, 0, self.VIEW_RANGE)
