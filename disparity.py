@@ -82,6 +82,17 @@ class DisparityExtender(Node):
         self.get_logger().info(f'raw_pd: {raw_pd:.3f}, error: {error:.3f}, derivative: {self.filtered_derivative:.3f}')
         return np.clip(raw_pd, 0.0, self.PD_MAX_OUTPUT)
             
+    #uses the danger value returned by the PD controller to give a speed value
+    def danger_to_speed(danger):
+        #consider adding a speed floor so that the car doesn't stop completely
+        #normalize the danger value 0..1 and get the inverse to scale speed
+        new_speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
+        #prevent jerking speed by apply a low pass filter to the speed change
+        self.filtered_speed = (self.filtered_speed * self.SPEED_FILTER_OLD) + (new_speed * self.SPEED_FILTER_NEW)
+        self.get_logger().info(f'x: {x}, speed: {speed}')
+        return self.filtered_speed
+
+
 
     def odom_cb(self, data):
         self.speed = data.twist.twist.linear.x
@@ -148,15 +159,9 @@ class DisparityExtender(Node):
         window = 6 #width to read around center
         x = np.mean(proc_ranges[center - window : center + window]) #forward clearance around center
 
-        #consider adding a speed floor so that the car doesn't stop completely
         danger = self.pd_controller_update(x)
-        #normalize the danger value 0..1 and get the inverse to scale speed
-        new_speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
-        #prevent jerking speed by apply a low pass filter to the speed change
-        self.filtered_speed = (self.filtered_speed * self.SPEED_FILTER_OLD) + (new_speed * self.SPEED_FILTER_NEW)
-        speed = self.filtered_speed
-        self.get_logger().info(f'x: {x}, speed: {speed}')
-
+        speed = self.danger_to_speed(danger)
+        
         #Makes the car backup and turn towards the goal point if there are no good paths.
         #if(x <= 0.35):
         #    speed *= -1
