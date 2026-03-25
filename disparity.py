@@ -156,6 +156,8 @@ class DisparityExtender(Node):
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_PERCENTAGE)
         
         steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges))
+        self.get_logger().info(f'steering angle: {steering_angle:.3f}')
+        
         center = len(proc_ranges) // 2
         window = 5 #width to read around center
         x = np.max(proc_ranges[center - window : center + window]) #forward clearence around center
@@ -164,6 +166,7 @@ class DisparityExtender(Node):
         danger = self.pd_controller_update(x)
         speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
         self.get_logger().info(f'x: {x}, speed: {speed}')
+        
 
         #Makes the car backup and turn towards the goal point if there are no good paths.
         #if(x <= 2.0):
