@@ -12,23 +12,23 @@ class DisparityExtender(Node):
 
     CAR_WIDTH = 0.27
     DIFFERENCE_THRESHOLD = 2.
-    STRAIGHTS_SPEED = 1.0
-    CORNERS_SPEED = 1.0
-    DRAG_SPEED = 1.0
     SAFETY_PERCENTAGE = 3.00
-    VIEW_RANGE = 10
+    VIEW_RANGE = 8
 
     #PD controller variables
     MAX_SPEED = 6.0
-    KP = 0.5
-    KD = 0.25
-    PD_MAX_OUTPUT = 10.0
+    KP = 1.8
+    KD = 1.8
+    PD_MAX_OUTPUT = 20.0
+    MAX_DERIVATIVE = 5.0
 
     #Used for derivative low pass filtering, should add up to 1.
     # Greater old = more smoothing
     # Greater new = more responsive but less noise suppression
     PD_FILTER_OLD = 0.8
     PD_FILTER_NEW = 0.2
+    SPEED_FILTER_OLD = 0.75
+    SPEED_FILTER_NEW = 0.25
 
     def __init__(self):
         super().__init__('disparity_extender_node')
@@ -42,6 +42,7 @@ class DisparityExtender(Node):
         self.prev_time = 0.0
         self.is_first_run = True
         self.filtered_derivative = 0.0
+        self.filtered_speed = 0.0
 
         self.speed = 2.0  # Initial speed
         self.radians_per_point = 0.0
@@ -70,8 +71,9 @@ class DisparityExtender(Node):
             if(dt > 1e-6):
                 derivative = (error - self.prev_error)/dt
 
-        #if there is too much jittering, may need to filter noise from deriavtive
-        self.filtered_derivative = 0.8 * self.filtered_derivative + 0.2 * derivative
+        #filter derivative in order to prevent noise from throwing off the controller
+        #we also clamp the derivative value to ensure reasonable adjustments
+        self.filtered_derivative = np.clip((self.PD_FILTER_OLD * self.filtered_derivative + self.PD_FILTER_NEW * derivative), -self.MAX_DERIVATIVE, self.MAX_DERIVATIVE);
         raw_pd = (self.KP * error) + (self.KD * self.filtered_derivative)
         
         self.prev_error = error
@@ -143,16 +145,20 @@ class DisparityExtender(Node):
         
         steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges))
         center = len(proc_ranges) // 2
-        window = 5 #width to read around center
-        x = np.max(proc_ranges[center - window : center + window]) #forward clearence around center
+        window = 6 #width to read around center
+        x = np.mean(proc_ranges[center - window : center + window]) #forward clearance around center
 
         #consider adding a speed floor so that the car doesn't stop completely
         danger = self.pd_controller_update(x)
-        speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
+        #normalize the danger value 0..1 and get the inverse to scale speed
+        new_speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
+        #prevent jerking speed by apply a low pass filter to the speed change
+        self.filtered_speed = (self.filtered_speed * self.SPEED_FILTER_OLD) + (new_speed * self.SPEED_FILTER_NEW)
+        speed = self.filtered_speed
         self.get_logger().info(f'x: {x}, speed: {speed}')
 
         #Makes the car backup and turn towards the goal point if there are no good paths.
-        #if(x <= 2.0):
+        #if(x <= 0.35):
         #    speed *= -1
         #    steering_angle *= -1
         
