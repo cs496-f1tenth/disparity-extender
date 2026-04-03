@@ -88,7 +88,7 @@ class DisparityExtender(Node):
         return np.clip(raw_pd, 0.0, self.PD_MAX_OUTPUT)
             
     #uses the danger value returned by the PD controller to give a speed value
-    def danger_to_speed(danger):
+    def danger_to_speed(self, danger):
         #consider adding a speed floor so that the car doesn't stop completely
         #normalize the danger value 0..1 and get the inverse to scale speed
         new_speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
