@@ -13,11 +13,11 @@ class DisparityExtender(Node):
     CAR_WIDTH = 0.27
     DIFFERENCE_THRESHOLD = 2.
     SAFETY_MULT = 3.00
-    VIEW_RANGE = 8
+    VIEW_RANGE = 12
 
     #PD controller variables
     MAX_SPEED = 6.0
-    KP = 1.8
+    KP = 1.4
     KD = 1.8
     PD_MAX_OUTPUT = 20.0
     MAX_DERIVATIVE = 5.0
@@ -33,14 +33,14 @@ class DisparityExtender(Node):
     # Percent of beams used for gaussian spread,
     # Higher = less preference for center (wider curve)
     # Lower = more preference for center (steeper curve)
-    GAUSSIAN_SIG_PCT = 0.6 #NOTE: 0.6 was what worked before adding PD speed, I believe this is too high in practice when combined
-    GAUS_FILTER_OLD = 0.5
-    GAUS_FILTER_NEW = 0.5
+    GAUSSIAN_SIG_PCT = 0.4 #NOTE: 0.6 was what worked before adding PD speed, I believe this is too high in practice when combined
+    GAUS_FILTER_OLD = 0.0
+    GAUS_FILTER_NEW = 1.0
 
     def __init__(self):
         super().__init__('disparity_extender_node')
 
-        self.STEERING_SENSITIVITY = 3.0
+        self.STEERING_SENSITIVITY = 10.0
         self.QUADRANT_FACTOR = 3.5
 
         #PD controller variables
@@ -156,17 +156,15 @@ class DisparityExtender(Node):
         proc_ranges = self.preprocess_lidar(ranges)
         differences = self.get_differences(proc_ranges)
         disparities = self.get_disparities(differences, self.DIFFERENCE_THRESHOLD)
-        proc_ranges = self.extend_disparities(
-            disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_MULT)
+        proc_ranges = self.extend_disparities(disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_MULT)
        
-_
         center = len(proc_ranges) // 2
 
         # GAUSSIAN CURVE FOR STEERING ANGLE CALCULATION
         weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * self.GAUSSIAN_SIG_PCT)) ** 2)
         weighted_ranges = proc_ranges * weights
         new_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
-        self.filtered_angle = (self.filtered_angle * GAUS_FILTER_OLD) + (new_angle * GAUS_FILTER_NEW)
+        self.filtered_angle = (self.filtered_angle * self.GAUS_FILTER_OLD) + (new_angle * self.GAUS_FILTER_NEW)
         steering_angle = self.filtered_angle
         #--------------------
 
