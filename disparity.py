@@ -34,6 +34,8 @@ class DisparityExtender(Node):
     # Higher = less preference for center (wider curve)
     # Lower = more preference for center (steeper curve)
     GAUSSIAN_SIG_PCT = 0.6 #NOTE: 0.6 was what worked before adding PD speed, I believe this is too high in practice when combined
+    GAUS_FILTER_OLD = 0.5
+    GAUS_FILTER_NEW = 0.5
 
     def __init__(self):
         super().__init__('disparity_extender_node')
@@ -48,6 +50,7 @@ class DisparityExtender(Node):
         self.is_first_run = True
         self.filtered_derivative = 0.0
         self.filtered_speed = 0.0
+        self.filtered_angle = 0.0
 
         self.speed = 2.0  # Initial speed
         self.radians_per_point = 0.0
@@ -156,13 +159,15 @@ class DisparityExtender(Node):
         proc_ranges = self.extend_disparities(
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_MULT)
        
-
+_
         center = len(proc_ranges) // 2
 
         # GAUSSIAN CURVE FOR STEERING ANGLE CALCULATION
         weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * self.GAUSSIAN_SIG_PCT)) ** 2)
         weighted_ranges = proc_ranges * weights
-        steering_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
+        new_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
+        self.filtered_angle = (self.filtered_angle * GAUS_FILTER_OLD) + (new_angle * GAUS_FILTER_NEW)
+        steering_angle = self.filtered_angle
         #--------------------
 
         window = 6 #width to read around center
