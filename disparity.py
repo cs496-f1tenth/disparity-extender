@@ -169,10 +169,13 @@ class DisparityExtender(Node):
 
         danger = self.pd_controller_update(x)
         speed = self.danger_to_speed(danger)
-        self.STEERING_SENSITIVITY = self.MAX_STEERING_SENSITIVITY * (1 - (danger/self.PD_MAX_OUTPUT)) 
-        self.get_logger().info(f'x: {x}, steering sens: {self.STEERING_SENSITIVITY}')
+        #modulate the steering parameters based on how fast the car is going, 
+        # if the car is moving faster, the fov hones in and the steering angle is padded.
+        self.STEERING_SENSITIVITY = np.clip(self.MAX_STEERING_SENSITIVITY * (speed/self.MAX_SPEED), 3, 30)
+        steering_angle = steering_angle * (1 - (speed/self.MAX_SPEED))
+        self.get_logger().info(f'x: {x}, speed: {speed}')
         
-        #Makes the car backup and turn towards the goal point if there are no good paths.
+        #EXPERIMENTAL: Makes the car backup and turn towards the goal point if there are no good paths.
         #if(x <= 0.35):
         #    speed *= -1
         #    steering_angle *= -1
