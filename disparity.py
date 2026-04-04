@@ -34,13 +34,12 @@ class DisparityExtender(Node):
     # Higher = less preference for center (wider curve)
     # Lower = more preference for center (steeper curve)
     GAUSSIAN_SIG_PCT = 0.4 #NOTE: 0.6 was what worked before adding PD speed, I believe this is too high in practice when combined
-    GAUS_FILTER_OLD = 0.0
-    GAUS_FILTER_NEW = 1.0
 
     def __init__(self):
         super().__init__('disparity_extender_node')
 
-        self.STEERING_SENSITIVITY = 10.0
+        self.STEERING_SENSITIVITY = 3.0
+        self.MAX_STEERING_SENSITIVITY = 30.0
         self.QUADRANT_FACTOR = 3.5
 
         #PD controller variables
@@ -50,7 +49,6 @@ class DisparityExtender(Node):
         self.is_first_run = True
         self.filtered_derivative = 0.0
         self.filtered_speed = 0.0
-        self.filtered_angle = 0.0
 
         self.speed = 2.0  # Initial speed
         self.radians_per_point = 0.0
@@ -163,9 +161,7 @@ class DisparityExtender(Node):
         # GAUSSIAN CURVE FOR STEERING ANGLE CALCULATION
         weights = np.exp(-0.5 * ((np.arange(len(proc_ranges)) - center) / (len(proc_ranges) * self.GAUSSIAN_SIG_PCT)) ** 2)
         weighted_ranges = proc_ranges * weights
-        new_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
-        self.filtered_angle = (self.filtered_angle * self.GAUS_FILTER_OLD) + (new_angle * self.GAUS_FILTER_NEW)
-        steering_angle = self.filtered_angle
+        steering_angle = self.get_steering_angle(weighted_ranges.argmax(), len(proc_ranges))
         #--------------------
 
         window = 6 #width to read around center
@@ -173,8 +169,8 @@ class DisparityExtender(Node):
 
         danger = self.pd_controller_update(x)
         speed = self.danger_to_speed(danger)
-        
-        self.get_logger().info(f'x: {x}, speed: {speed}')
+        self.STEERING_SENSITIVITY = self.MAX_STEERING_SENSITIVITY * (1 - (danger/self.PD_MAX_OUTPUT)) 
+        self.get_logger().info(f'x: {x}, steering sens: {self.STEERING_SENSITIVITY}')
         
         #Makes the car backup and turn towards the goal point if there are no good paths.
         #if(x <= 0.35):
