@@ -31,9 +31,6 @@ class DisparityExtender(Node):
     SPEED_FILTER_OLD = 0.75
     SPEED_FILTER_NEW = 0.25
 
-    #steering bias variables
-    OUTSIDE_BIAS = 0.3
-
     def __init__(self):
         super().__init__('disparity_extender_node')
 
@@ -145,13 +142,9 @@ class DisparityExtender(Node):
         return ranges
 
     def get_steering_angle(self, range_index, range_len):
-
         lidar_angle = (range_index - (range_len / 2)) * self.radians_per_point
         steering_angle = np.clip(
             lidar_angle, np.radians(-90), np.radians(90)) / self.STEERING_SENSITIVITY
-        
-        #add steering bias
-        steering_angle -= self.OUTSIDE_BIAS * steering_angle
         return steering_angle
 
     def process_lidar(self, data):
@@ -165,6 +158,7 @@ class DisparityExtender(Node):
             disparities, proc_ranges, self.CAR_WIDTH, self.SAFETY_PERCENTAGE)
         
         steering_angle = self.get_steering_angle(proc_ranges.argmax(), len(proc_ranges))
+        self.get_logger().info(f'steering angle: {steering_angle:.3f}')
         
         center = len(proc_ranges) // 2
         window = 6 #width to read around center
