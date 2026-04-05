@@ -53,14 +53,26 @@ class DisparityExtender(Node):
         self.speed = 2.0  # Initial speed
         self.radians_per_point = 0.0
 
-        lidarscan_topic = '/scan'
-        odom_topic = '/vesc/odom'
-        drive_topic = '/vesc/low_level/ackermann_cmd_mux/input/teleop'
+        # namespace
+        ns = self.get_namespace()
+        if ns == '/':
+            self.get_logger().warn(
+                "Node running in global namespace. "
+                "For multi-vehicle, run with __ns:=/vehicleX"
+            )
+
+        self.declare_parameter('odom_topic', 'odom')
+        self.declare_parameter('scan_topic', 'scan')
+        self.declare_parameter('drive_topic', 'drive')
+
+        odom_topic = self.get_parameter('odom_topic').value
+        scan_topic = self.get_parameter('scan_topic').value
+        drive_topic = self.get_parameter('drive_topic').value
 
         self.odom_sub = self.create_subscription(
             Odometry, odom_topic, self.odom_cb, 2)
         self.lidar_sub = self.create_subscription(
-            LaserScan, lidarscan_topic, self.process_lidar, 1)
+            LaserScan, scan_topic, self.process_lidar, 1)
         self.drive_pub = self.create_publisher(
             AckermannDriveStamped, drive_topic, 1)
 
