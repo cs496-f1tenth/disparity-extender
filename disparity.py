@@ -83,13 +83,12 @@ class DisparityExtender(Node):
         return np.clip(raw_pd, 0.0, self.PD_MAX_OUTPUT)
             
     #uses the danger value returned by the PD controller to give a speed value
-    def danger_to_speed(danger):
+    def danger_to_speed(self, danger):
         #consider adding a speed floor so that the car doesn't stop completely
         #normalize the danger value 0..1 and get the inverse to scale speed
         new_speed = self.MAX_SPEED * (1 - (danger/self.PD_MAX_OUTPUT))
         #prevent jerking speed by apply a low pass filter to the speed change
         self.filtered_speed = (self.filtered_speed * self.SPEED_FILTER_OLD) + (new_speed * self.SPEED_FILTER_NEW)
-        self.get_logger().info(f'x: {x}, speed: {speed}')
         return self.filtered_speed
 
 
@@ -166,6 +165,7 @@ class DisparityExtender(Node):
         #if(x <= 0.35):
         #    speed *= -1
         #    steering_angle *= -1
+        self.get_logger().info(f'x: {x}, speed: {speed}')
         
         drive_msg = AckermannDriveStamped()
         drive_msg.header.stamp = self.get_clock().now().to_msg()
